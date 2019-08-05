@@ -68,7 +68,7 @@ if os.path.exists(savedFrames):               	#check if savedFrames file exists
 		print(command)
 		os.system(command)
 		
-		command = "alignframes -vary " + alignframes_filter + " -bin " + alignframes_filter + " -shift 100 -in " + outstack + "_" + str(tiltno).zfill(2) + ".mrc -ou " + outstack + "_" + str(tiltno).zfill(2) + "_ali.mrc"
+		command = "alignframes -vary " + alignframes_filter + " -bin " + alignframes_binning + " -shift 100 -in " + outstack + "_" + str(tiltno).zfill(2) + ".mrc -ou " + outstack + "_" + str(tiltno).zfill(2) + "_ali.mrc"
 		print(command)
 		os.system(command)
 
