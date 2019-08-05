@@ -1,0 +1,222 @@
+ScriptName FISETomo
+
+# ETH Zurich 2018/10/10, Fabian Eisenstein
+# Last change: 	2019/03/06: added alignToP and group scaling
+#		2018/12/02: added focus adjustment
+# 		2018/11/19: added IScal
+
+###### TO DO BEFORE USE ######
+# - check Frame folder and naming
+# - check Target defocus
+# - activate Trial in LD for fine euc
+# - find and set tilt axis offset
+# - test base time
+# - run CalFISE with same settings
+# - check buffer P for view of hole
+# - check dose and coma-free
+# - turn turbo to auto-off
+
+########## SETTINGS ##########
+
+TStype 		= 3		# 1: unidirectional, (2: bidirectional), 3: dose-symmetrical
+increment 	= 3		# tilt angle increment
+maxtilt 	= 60		# maximum +/- tilt angle
+
+maxtiltG1	= 60		# NOT TESTED # maximum tilt for 2 steps per group (set to maxtilt to disable group scaling)
+maxtiltG2	= 60		# NOT TESTED # maximum tilt for 4 steps per group (set to maxtilt to disable group scaling)
+
+expTime 	= 1		# exposure time per tilt in seconds
+delay 		= 0		# delay after tilting in seconds
+useCal 		= 0		# use global cal variables (run CalFISE script on carbon with gold before; only for dose-sym TS)
+frameTime 	= 0.2		# K3 allows only <0.1 (DM plugin limited)
+frameThreshold 	= 1		# threshold for saving frames (depends on dose rate and frameTime; default of 1 seems to work well)
+
+minDefocus 	= -3		# minimum defocus of defocus cycle
+maxDefocus 	= -5		# maximum defocus of defocus cycle
+defocusStep 	= 0.5		# defocus increase between targets
+
+centerHole	= 0		# align to buffer P (1: center on holes; view image of hole needs to be in buffer P)
+maxHoleShift 	= 100   	# max beam/image shift after hole centering in nanometers to not iterate
+
+dryRun 		= 0		# dryRun without saving Frames to get estimate for baseTime
+
+baseTimeType3 	= 150		# Time needed for tilting during whole tilt scheme. Needs to be tested on each system and each increment.
+				# Example values:
+				# dose-sym ST/K3 increment 3: 	89
+				# dose-sym DT/K2 increment 3: 	148
+				# dose-sym ST/K3 increment 2: 	124
+				# dose-sym DT/K2 increment 2: 	208
+
+baseTimeType1 	= 50		# uni-dir ST/K3 increment 3: 	50
+				# uni-dir DT/K2 increment 3: 	76
+				# uni-dir ST/K3 increment 2: 	65
+				# uni-dir DT/K2 increment 2: 	95
+
+######## END SETTINGS ########
+
+ResetClock
+
+######## CALIBRATIONS ########
+defocusSlope = 0
+IScal = {0 0 0 0 0 0 0 0 0 0}			#default image shift calibration values
+IScal = {$IScal 0 0 0 0 0 0 0 0 0 0}
+IScal = {$IScal 0 0 0 0 0 0 0 0 0 0}
+IScal = {$IScal 0 0 0 0 0 0 0 0 0 0}
+IScal = {$IScal 0 0 0 0 0 0 0 0 0 0}
+IScal = {$IScal 0 0 0 0 0 0 0 0 0 0}
+IScal = {$IScal 0 0 0 0 0 0 0 0 0 0}
+IScal = {$IScal 0 0 0 0 0 0 0 0 0 0}
+
+IScal = {$IScal 0 0 0 0 0 0 0 0 0 0}		#extra entries incase of 2 deg increments
+IScal = {$IScal 0 0 0 0 0 0 0 0 0 0}
+IScal = {$IScal 0 0 0 0 0 0 0 0 0 0}
+IScal = {$IScal 0 0 0 0 0 0 0 0 0 0}
+
+if $useCal == 1
+        IScal = $IScalGlobal
+        defocusSlope = $defocusSlopeGlobal
+endif
+
+######## END CALIBRATIONS ########
+
+echo ##### New Tilt Series #####
+echo TS scheme: $TStype with increment $increment 
+echo Exposure time: $expTime s ($frameTime s frames)
+echo Delay: $delay s
+echo useCal: $useCal
+
+### DETERMINE TARGET DEFOCUS ###
+
+ReportTargetDefocus
+targetDefocus = $RepVal1
+
+targetDefocus = $targetDefocus - $defocusStep
+If $targetDefocus < $maxDefocus
+        targetDefocus = $minDefocus
+Endif  
+echo Target defocus: $targetDefocus
+SetTargetDefocus $targetDefocus
+
+echo #####
+
+### PREPARE TS ###
+
+Eucentricity 6
+echo Target eucentricity confirmed...
+ReportClock
+
+if $centerHole == 1
+	V
+	AlignTo P
+
+	ReportAlignShift
+	holeshift = sqrt $RepVal5 * $RepVal5 + $RepVal6 * $RepVal6
+	echo Hole shift 1: $holeshift (x: $RepVal5; y: $RepVal6)
+	if $holeshift > $maxHoleShift
+		ResetImageShift
+		V
+		AlignTo P
+		ReportAlignShift
+		holeshift = sqrt $RepVal5 * $RepVal5 + $RepVal6 * $RepVal6
+		echo Hole shift 2: $holeshift (x: $RepVal5; y: $RepVal6)
+	endif
+	echo Target centered...
+endif
+
+G
+echo Target defocussed...
+ReportClock
+
+FrameThresholdNextShot $frameThreshold
+
+If $TStype == 3
+
+	baseTime = $baseTimeType3
+
+	angleplus = 0
+	angleminus = 0
+	Tilts = {$angleplus $expTime $delay 0 0 0}
+	calx = -1
+	caly = 0
+
+	loopno = ($maxtiltG1 / 2 / $increment) + (($maxtiltG2 - $maxtiltG1) / 4 / $increment) + (($maxtilt - $maxtiltG2) / 6 / $increment)
+	loop $loopno
+		group = 2
+		if $angleplus > $maxtiltG2
+			group = 6
+		elseif $angleplus > $maxtiltG1
+			group = 4
+		endif
+
+		if $angleplus + $group * $increment > $maxtilt		#make sure TS does not go beyond maxtilt
+			group = $maxtilt - $angleplus * $increment
+		endif
+
+		loop $group
+			angleplus = $angleplus + $increment
+			calx = $calx + 2
+			caly = $caly + 2
+			foc = $defocusSlope * $angleplus
+			Tilts = {$Tilts $angleplus $expTime $delay $foc $IScal[$calx] $IScal[$caly]}
+		endloop
+
+		loop $group
+			angleminus = $angleminus - $increment
+			calx = $calx + 2
+			caly = $caly + 2
+			foc = $defocusSlope * $angleminus
+			Tilts = {$Tilts $angleminus $expTime $delay $foc $IScal[$calx] $IScal[$caly]}
+		endloop
+	endloop
+
+	FrameSeriesFromVar Tilts 31
+
+Elseif $TStype == 2
+
+	Tilts = {-18 $expTime -15 $expTime -12 $expTime -9 $expTime -6 $expTime -3 $expTime 0 $expTime 3 $expTime 6 $expTime 9 $expTime}
+	Tilts = {$Tilts 12 $expTime 15 $expTime 18 $expTime 21 $expTime 24 $expTime 27 $expTime 30 $expTime 33 $expTime 36 $expTime}
+	Tilts = {$Tilts 39 $expTime 42 $expTime 45 $expTime 48 $expTime 51 $expTime 54 $expTime 57 $expTime 60 $expTime -21 $expTime}
+	Tilts = {$Tilts -24 $expTime -27 $expTime -30 $expTime -33 $expTime -36 $expTime -39 $expTime -42 $expTime -45 $expTime -48 $expTime}
+	Tilts = {$Tilts -51 $expTime -54 $expTime -57 $expTime -60 $expTime}
+
+	FrameSeriesFromVar $Tilts 3
+
+Elseif $TStype == 1
+
+	baseTime = $baseTimeType1
+
+	tiltNumber = (60 * 2 / $increment) + 1
+    	QueueFrameTiltSeries -60 $increment $tiltNumber 0 $expTime $delay
+
+Else
+	echo This tilt scheme is currently not supported!
+Endif
+
+totalExpTime = $baseTime + (120 / $increment + 1) * ($exptime + $delay)
+
+echo Set total exposure to $totalExpTime s with $frameTime s fractionation.
+SetExposure R $totalExpTime
+SetFrameTime R $frameTime
+
+If $dryRun == 1
+	echo It's just a drill!
+	SetExposure R 10
+	SetFrameTime R 0.1
+	EarlyReturnNextShot 1
+Endif
+
+echo Fire!
+ReportClock
+R
+echo Target eliminated!
+ReportClock
+#S
+#ReportClock
+WriteFrameSeriesAngles FISE_tilts.txt
+TiltTo 0
+SetDefocus 0
+ResetImageShift
+CloseFile
+
+echo Mission complete!
+ReportClock

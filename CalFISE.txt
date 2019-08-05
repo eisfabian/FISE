@@ -1,0 +1,184 @@
+ScriptName CalFISE
+
+# ETH Zurich 2018/12/01, Fabian Eisenstein
+# modified from Grouped dose-symmetric tomography by Wim J. H.Hagen
+# Last Change:	2019/03/06: implemented scaled group sizes
+#
+###### TO DO BEFORE USE ######
+# - activate Trial in LD for fine euc
+# - find and set tilt axis offset
+# - Roll buffers should be set to A -> H.
+# Script uses Preview settings and no output is saved.
+# Calibrations are saved as a global variable and are reset when you restart SerialEM!
+
+########## SETTINGS ########## 
+
+step 		= 3	# tilt step
+maxtilt 	= 60	# maximum +/- tilt angle
+maxtiltG1	= 60	# NOT TESTED # maximum tilt for 2 steps per group (set to maxtilt to not have groups of 4)
+maxtiltG2	= 60	# NOT TESTED # maximum tilt for 4 steps per group (set to maxtilt to not have groups of 6)
+
+xfactor 	= -1	# calibration factor for x shift (possibly dependent on camera config)
+yfactor 	= -1	# calibration factor for y shift (possibly dependent on camera config)
+
+defocusCheck1	= 12	# small angle to measure defocus for slope approximation
+defocusCheck2	= 36	# large angle to measure defocus for slope approximation
+
+########## END SETTINGS ########## 
+
+echo ##########
+echo Starting calibration TS with X factor = $xfactor and Y factor = $yfactor (increment = $step deg)
+
+ResetClock
+SuppressReports
+
+SetCameraArea R F
+SetDoseFracParams R 0
+
+branchesteps = ($maxtiltG1 / 2 / $step) + (($maxtiltG2 - $maxtiltG1) / 4 / $step) + (($maxtilt - $maxtiltG2) / 6 / $step)
+
+plustilt = 0
+mintilt = 0
+
+# zero tilt image
+CallFunction TiltZero
+
+ReportSpecimenShift
+xstart = $RepVal1
+ystart = $RepVal2
+
+createCal = 1
+loop $branchesteps
+	group = 2
+	if $plustilt > $maxtiltG2
+		group = 6
+	elseif $plustilt > $maxtiltG1
+		group = 4
+	endif
+	if $plustilt + $group > $maxtilt		#make sure TS does not go beyond maxtilt
+		group = $maxtilt - $plustilt
+	endif
+	loop $group
+		plustilt = $plustilt + $step
+
+		CallFunction TiltPlus
+
+		ReportSpecimenShift
+		dx = ($xstart - $RepVal1) * $xfactor
+		dy = ($ystart - $RepVal2) * $yfactor
+		echo Tilt: $plustilt - x: $dx y: $dy
+
+		if $createCal == 1
+		        cal = {$dx $dy}
+		        createCal = 0
+		else
+		        cal = {$cal $dx $dy}
+		endif
+
+		if $plustilt == $defocusCheck1
+			G -1 -1
+			ReportAutofocus
+			defocusp1 = $RepVal1
+		endif
+		if $plustilt == $defocusCheck2
+			G -1 -1
+			ReportAutofocus
+			defocusp2 = $RepVal1
+		endif
+	endloop	
+	loop $group
+		mintilt = $mintilt - $step
+
+		CallFunction TiltMinus
+
+		ReportSpecimenShift
+		dx = ($xstart - $RepVal1) * $xfactor
+		dy = ($ystart - $RepVal2) * $yfactor
+		echo $mintilt $dx $dy
+
+		cal = {$cal $dx $dy}
+
+		if $mintilt == (-1) * $defocusCheck1
+			G -1 -1
+			ReportAutofocus
+			defocusm1 = $RepVal1
+		endif
+		if $mintilt == (-1) * $defocusCheck2
+			G -1 -1
+			ReportAutofocus
+			defocusm2 = $RepVal1
+		endif
+	endloop
+endLoop
+
+# finish
+RestoreCameraSet R
+TiltTo 0
+SetDefocus 0
+ResetImageShift
+
+echo $cal
+IScalGlobal := $cal
+
+echo Defocus at -$defocusCheck2 / -$defocusCheck1 / 0 / +$defocusCheck1 / +$defocusCheck2:
+echo $defocusm2 / $defocusm1 / $defocuszero / $defocusp1 / $defocusp2
+defocusavg = ($defocusm1 + $defocusm2 + $defocusp1 + $defocusp2) / 4
+defocusSlope = ((-1) * $defocusCheck2 * ($defocusm2 - $defocusavg) + (-1) * $defocusCheck1 * ($defocusm1 - $defocusavg) + $defocusCheck1 * ($defocusp1 - $defocusavg) + $defocusCheck2 * ($defocusp2 - $defocusavg))
+defocusSlope = $defocusSlope / (2 * $defocusCheck1 * $defocusCheck1 + 2 * $defocusCheck2 * $defocusCheck2) * (-1)
+echo Defocus slope = $defocusSlope
+defocusSlopeGlobal := $defocusSlope
+echo ##### CAL was saved! Activate useCal in FISEtomo script! #####
+echo ##### If tilt series did not finish or alignment seemed off, run CalFISE again on a different position! #####
+
+CloseFile
+
+ReportClock
+echo xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+function TiltZero
+	Eucentricity 6
+	G
+	ReportAutofocus
+ 	defocuszero = $RepVal1
+
+	L
+
+	Copy A M
+	Copy A N
+
+	ReportImageShift
+	ISxplus = $RepVal1
+	ISyplus = $RepVal2
+	ISxminus = $RepVal1
+	ISyminus = $RepVal2
+endfunction
+
+function TiltPlus
+	TiltTo $plustilt
+        #Delay 1000
+	SetImageShift  $ISxplus $ISyplus
+
+	L
+
+	AlignTo M
+
+	Copy A M
+	ReportImageShift
+	ISxplus = $RepVal1
+	ISyplus = $RepVal2	
+endfunction
+
+Function TiltMinus
+	TiltTo $mintilt
+        #Delay 1000
+	SetImageShift  $ISxminus $ISyminus
+
+	L
+
+	AlignTo N
+
+	Copy A N
+	ReportImageShift
+	ISxminus = $RepVal1
+	ISyminus = $RepVal2
+endfunction
