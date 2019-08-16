@@ -10,6 +10,7 @@ ScriptName CalFISE
 # - Roll buffers should be set to A -> H.
 # Script uses Preview settings and no output is saved.
 # Calibrations are saved as a global variable and are reset when you restart SerialEM!
+# Depending on the sample I recommend to run CalFISE once per square. At bigger pixel sizes, less should work.
 
 ########## SETTINGS ########## 
 
