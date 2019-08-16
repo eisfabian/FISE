@@ -9,4 +9,8 @@ Scripts for use with FISE tilt series acquisition:
 
 <b>sortByTilt.py</b> - Python script used to sort tilt stack by tilt angle. Requires .mdoc file or FISE_tilts.txt for tilt angle input.
 
-WARNING: These scripts were used mainly for dose-symmetric 3° increment tilt series. If you have trouble with other schemes, please let me know! If you have any questions, don't hesitate to contact me!
+
+WARNING: 
+- These scripts were used mainly for dose-symmetric 3° increment tilt series. If you have trouble with other schemes, please let me know! 
+- If you plan on using small pixel sizes (<2 Å/px), the loss of FOV might be too big to obtain usable data.
+- If you have any questions, don't hesitate to contact me!
