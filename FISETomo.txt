@@ -11,10 +11,8 @@ ScriptName FISETomo
 # - activate Trial in LD for fine euc
 # - find and set tilt axis offset
 # - test base time
-# - run CalFISE with same settings
-# - check buffer P for view of hole
-# - check dose and coma-free
-# - turn turbo to auto-off
+# - run CalFISE with same settings (needs to be run after every SerialEM restart!)
+# - check buffer P for view of hole in case you activated centerHole
 
 ########## SETTINGS ##########
 
@@ -39,6 +37,7 @@ centerHole	= 0		# align to buffer P (1: center on holes; view image of hole need
 maxHoleShift 	= 100   	# max beam/image shift after hole centering in nanometers to not iterate
 
 dryRun 		= 0		# dryRun without saving Frames to get estimate for baseTime
+				# baseTime should be > ([time after frames saved] - [time before frames saved] - [tilt angles] * [exposure time])
 
 baseTimeType3 	= 150		# Time needed for tilting during whole tilt scheme. Needs to be tested on each system and each increment.
 				# Example values:
