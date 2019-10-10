@@ -1,25 +1,32 @@
 #!/usr/bin/python3
 # ===================================================================
-# Name:		sortByTilt
-# Purpose:	Reads mdoc file, sorts stack by tilt angle and creats sorted stack and mdoc file
-#		python sortByTilt.py [input stack] [output stack] [mdoc file]
+# Name:			sortByTilt
+# Purpose:		Reads .mdoc file or .tlt file, sorts stack by tilt angle and creates sorted stack and mdoc file
+#				python sortByTilt.py [input stack] [output stack] [tilt file]
 # Called From:  User, makeAlignedStack
 # Author:       Fabian Eisenstein
-# Revision:     v1.1 
-# Last Change:	2019/03/06: implemented reading of .tlt-like files
-#		2018/03/13: minor text fixes
-# Created:	2018/03/12
+# Revision:     v1.2 
+# Last Change:	2019/10/10: optimizations
+#				2019/03/06: implemented reading of .tlt-like files
+#				2018/03/13: minor text fixes
+# Created:		2018/03/12
 # ===================================================================
 
 import sys
 import os
 import operator
+import argparse
 
-#make input compatible with python 2.7
-try:
-	input = raw_input
-except NameError:
-	pass
+parser = argparse.ArgumentParser(description='Reads .mdoc file or .tlt file, sorts stack by tilt angle and creates sorted stack and .mdoc file.')
+parser.add_argument('inputStack',help='Path to input stack.')
+parser.add_argument('outputStack',help='Path to output stack.')
+parser.add_argument('tiltFile',help='Path to .mdoc or .tlt file containing tilt angles.')
+
+args = parser.parse_args()
+instack = args.inputStack
+outstack = args.outputStack
+mdocFileName = args.tiltFile
+
 
 def readMdoc(raw):                                                   		#Makes list of Mics for sorting
 	raw.seek(0)
@@ -51,13 +58,6 @@ def readTilt(raw):                                                   		#Makes li
 		zval += 1
 	return mics
 
-if len(sys.argv) == 4:
-	instack = sys.argv[1]                                              	#if no arguments were given when script was called: ask for them
-	outstack = sys.argv[2]
-	mdocFileName = sys.argv[3]
-else:
-	print ("Usage: python " + sys.argv[0] + " [input stack] [output stack] [mdoc/tlt file]")
-	sys.exit("Missing arguments!")
 
 
 if os.path.exists(mdocFileName):                                                #check if mdoc file exist, then open it and read tilts
@@ -76,19 +76,26 @@ if os.path.exists(mdocFileName):                                                
 
 	newmdocList = sorted(mdocList, key=operator.itemgetter(1))		#sorts list of mics by tilt
 
-	command = "newstack -in " + instack + " -ou " + outstack + " "
-	if mdoc == 1: 
-		command = command + "-mdoc " 
-	command = command + "-se "
-	for mic in newmdocList:
-		command = command + mic[0] + ","
-	command = command.strip(",")
+	if os.path.exists(instack):
 
-	print(command)
-	os.system("cp " + mdocFileName + " " + instack + ".mdoc")
-	os.system(command)
-	if instack != outstack:
-		os.system("rm " + instack + ".mdoc") 
+		command = "newstack -in " + instack + " -ou " + outstack + " "
+		if mdoc == 1: 
+			command = command + "-mdoc " 
+		command = command + "-se "
+		for mic in newmdocList:
+			command = command + mic[0] + ","
+		command = command.strip(",")
 
+		print(command)
+		if instack.split('.')[0] != mdocFileName.split('.')[0]:
+			os.system("cp " + mdocFileName + " " + instack + ".mdoc")
+
+		os.system(command)
+		if instack != outstack and instack.split('.')[0] != mdocFileName.split('.')[0]:
+			os.system("rm " + instack + ".mdoc")
+		if mdoc ==1:
+			print ("New mdoc file was written!")
+	else:
+		print (instack + " doesn't exist!\n")
 else:
 	print (mdocFileName + " doesn't exist!\n")
